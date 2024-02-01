@@ -1,5 +1,7 @@
 package Array.layoutFX;
 
+import java.util.ArrayList;
+
 import Array.PamArray;
 import Array.Streamer;
 import PamController.PamController;
@@ -10,6 +12,7 @@ import pamViewFX.fxNodes.PamBorderPane;
 import pamViewFX.fxNodes.flipPane.PamFlipPane;
 import pamViewFX.fxNodes.table.TableSettingsPane;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
 import javafx.scene.layout.Pane;
 import javafx.geometry.Insets;
 
@@ -46,6 +49,11 @@ public class StreamersPane extends PamBorderPane {
 	 */
 	private StreamerSettingsPane streamerPane = new StreamerSettingsPane(); 
 	
+	/**
+	 * A list of listeners which are called whenever a streamer is added removed or changed. 
+	 */
+	public ArrayList<ArrayChangeListener> streamerChangeListeners = new ArrayList<ArrayChangeListener>();
+	
 	
 	public StreamersPane() {
 
@@ -66,15 +74,17 @@ public class StreamersPane extends PamBorderPane {
 		pamFlipePane.getFront().setPadding(new Insets(5,5,5,10));
 		pamFlipePane.setAdvLabelEditable(true); 
 		pamFlipePane.getPostAdvLabel().setText("Settings");
+		
+		
+		pamFlipePane.backButtonProperty().addListener((obsval, oldVal, newVal)->{
+			
+//			System.out.println("Hello back button pressed: " +  newVal.intValue());
 
-		pamFlipePane.flipFrontProperty().addListener((obsval, oldVal, newVal)->{
 			//the flip pane
-			if (newVal) {
+			if (newVal.intValue()==PamFlipPane.OK_BACK_BUTTON) {
 				
 				Streamer streamer = streamerPane.getParams(currentStreamerData.getStreamer());
-				
-				System.out.println("NEW STREAMER: " + streamer);
-				
+								
 				if (streamer==null) {
 					//the warning dialog is shown in the streamer settings pane
 					return;
@@ -83,6 +93,9 @@ public class StreamersPane extends PamBorderPane {
 				streamer.setStreamerName(pamFlipePane.getAdvLabel().getText()); 
 				
 				currentStreamerData.setStreamer(streamer);
+				
+				notifyStreamerListeners(currentStreamerData);
+//				System.out.println("Update streamer: " + tableArrayPane.getStreamers().indexOf(currentStreamerData) + " no. streamers: " + currentArray.getNumStreamers());
 
 				//need to refresh table to show symbol. 
 				tableArrayPane.getTableView().refresh();
@@ -91,14 +104,22 @@ public class StreamersPane extends PamBorderPane {
 					streamer.setupLocator(currentArray);
 					streamer.makeStreamerDataUnit();
 					//update the streamer in the current array
-//					System.out.println("Update streamer: " + tableArrayPane.getStreamers().indexOf(currentStreamerData) + " no. streamers: " + currentArray.getNumStreamers());
 				}
-
 			}
 		});
 
 		this.setCenter(pamFlipePane);
 
+	}
+
+	/**
+	 * Notify the streamer listeners of a change
+	 * @param streamer - the changed streamer
+	 */
+	public void notifyStreamerListeners(StreamerProperty streamer) {
+		for (ArrayChangeListener listener: streamerChangeListeners) {
+			listener.arrayChanged(ArrayChangeListener.STREAMER_CHANGE, streamer);
+		}
 	}
 
 	/**
@@ -132,14 +153,14 @@ public class StreamersPane extends PamBorderPane {
 			y.setEditable(false);
 
 			z = new TableColumn<StreamerProperty,Number>("depth");
-			z.setCellValueFactory(cellData -> cellData.getValue().getZ());
+			z.setCellValueFactory(cellData -> cellData.getValue().getZ().multiply(PamController.getInstance().getGlobalMediumManager().getZCoeff()));
 			z.setEditable(false);
 			
 			TableColumn posColumn=new TableColumn("Position (m)"); 
 			posColumn.getColumns().addAll(x, y, z);
 
 			TableColumn<StreamerProperty,String>  reference = new TableColumn<StreamerProperty,String>("Reference");
-			reference.setCellValueFactory(cellData -> cellData.getValue().getHydrophineLocator());
+			reference.setCellValueFactory(cellData -> cellData.getValue().getHydrophoneOrigin());
 			reference.setEditable(true);
 
 			TableColumn<StreamerProperty,String>  locator = new TableColumn<StreamerProperty,String>("Locator");
@@ -200,6 +221,15 @@ public class StreamersPane extends PamBorderPane {
 			//add to the current array.
 			currentArray.addStreamer(newStreamer.getStreamer()); 
 			System.out.println("Create new streamer: " + currentArray.getNumStreamers());
+			
+			notifyStreamerListeners(newStreamer);
+
+		}
+		
+		@Override
+		public void deleteData(StreamerProperty data){
+			super.deleteData(data);
+			notifyStreamerListeners(null);
 		}
 
 		private StreamerProperty createDefaultStreamerProperty() {
@@ -215,7 +245,7 @@ public class StreamersPane extends PamBorderPane {
 	}
 
 	/**
-	 * Set the paramters for the streamer pane. 
+	 * Set the parameters for the streamer pane. 
 	 * @param currentArray - the current array. 
 	 */
 	public void setParams(PamArray currentArray) {
@@ -239,29 +269,46 @@ public class StreamersPane extends PamBorderPane {
 	public PamArray getParams(PamArray currParams) {
 		
 		//add all new streamers - bit weird because the PamArray requires that at least one streamer exists.
+				
 		for (int i=0; i<tableArrayPane.getStreamers().size(); i++) {
 			
 			if (i<currentArray.getStreamerCount()) {
-				currentArray.updateStreamer(i,tableArrayPane.getStreamers().get(i).getStreamer());
+				currParams.updateStreamer(i,tableArrayPane.getStreamers().get(i).getStreamer());
 			}
 			else {
-				currentArray.addStreamer(tableArrayPane.getStreamers().get(i).getStreamer());
+				currParams.addStreamer(tableArrayPane.getStreamers().get(i).getStreamer());
 			}
 		}
 		
-		while (currentArray.getStreamerCount()>tableArrayPane.getStreamers().size()) {
-			currentArray.removeStreamer(currentArray.getStreamerCount()-1);
+		while (currParams.getStreamerCount()>tableArrayPane.getStreamers().size()) {
+			currParams.removeStreamer(currParams.getStreamerCount()-1);
 		}
 		
 //		currentArray.updateStreamer(tableArrayPane.getStreamers().indexOf(currentStreamerData), streamer);
-		System.out.println("Get params streamer: " + currentArray.getNumStreamers());
 		
-		return currentArray;
+		return currParams;
 	}
 
 	public void setRecieverLabels() {
 		tableArrayPane.getZColumn().setText(PamController.getInstance().getGlobalMediumManager().getZString());
 		streamerPane.setRecieverLabels();
+	}
+
+	public TableView<StreamerProperty> getStreamerTable() {
+		return tableArrayPane.getTableView();
+	}
+
+	/**
+	 * Add a listener which is called whenever a streamer is added, removed or changed. 
+	 * @param e - the listener to add
+	 */
+	public void addStreamerListener(ArrayChangeListener e) {
+		this.streamerChangeListeners.add(e); 
+	}
+
+	public void setCurrentArray(PamArray currentArray) {
+		this.currentArray=currentArray;
+		
 	}
 
 

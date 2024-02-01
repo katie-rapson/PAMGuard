@@ -1,9 +1,6 @@
 package Array.layoutFX;
 
-import javax.swing.JTextField;
-
 import Array.Hydrophone;
-import PamController.SettingsPane;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import Array.PamArray;
@@ -21,8 +18,10 @@ import javafx.scene.layout.Region;
 import net.synedra.validatorfx.Validator;
 import pamViewFX.PamGuiManagerFX;
 import pamViewFX.fxNodes.PamVBox;
+import pamViewFX.fxSettingsPanes.DynamicSettingsPane;
 import pamViewFX.fxNodes.PamBorderPane;
 import pamViewFX.fxNodes.PamGridPane;
+import pamViewFX.fxNodes.PamHBox;
 import pamViewFX.fxNodes.PamSpinner;
 import pamViewFX.validator.PamValidator;
 
@@ -32,7 +31,7 @@ import pamViewFX.validator.PamValidator;
  * @author Jamie Macaulay 
  *
  */
-public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
+public class HydrophoneSettingsPane extends DynamicSettingsPane<Hydrophone> {
 
 	private static final double COLUMN_0_WIDTH = 120;
 	
@@ -102,7 +101,7 @@ public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
 	 */
 	private PamBorderPane mainPane;
 
-	private InterpSettingsPane interpPane;
+	private InterpChoicePane interpPane;
 
 	private ComboBox<String> defaultHydro;
 
@@ -123,9 +122,14 @@ public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
 		Label interpLabel = new Label("Interpolation");
 		PamGuiManagerFX.titleFont2style(interpLabel);
 
-		interpPane = new InterpSettingsPane();
+		interpPane = new InterpChoicePane();
+		
+		PamHBox interpHolder = new PamHBox(); 
+		interpHolder.setSpacing(5);
+		interpHolder.setAlignment(Pos.CENTER_LEFT);
+		interpHolder.getChildren().addAll(new Label("Method"), interpPane); 
 
-		holderPane.getChildren().addAll(recieverIDLabel, createGeneralPane(), coOrdLabel, createPositionPane(), interpLabel, interpPane); 
+		holderPane.getChildren().addAll(recieverIDLabel, createGeneralPane(), coOrdLabel, createPositionPane(), interpLabel, interpHolder); 
 
 		mainPane = new PamBorderPane(); 
 		mainPane.setCenter(holderPane);
@@ -343,13 +347,25 @@ public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
 		double maxWidth =10; 
 
 		xPos=new TextField();
+		xPos.textProperty().addListener((obsVal, oldVal, newVal)->{
+			notifySettingsListeners();
+		});
 		xPos.setMaxWidth(maxWidth);
 		addTextValidator(xPos, "x position", validator); 
+		
 		yPos=new TextField();
 		yPos.setMaxWidth(maxWidth);
 		addTextValidator(yPos, "y position", validator); 
+		yPos.textProperty().addListener((obsVal, oldVal, newVal)->{
+			notifySettingsListeners();
+		});
+		
 		zPos=new TextField();
 		zPos.setMaxWidth(maxWidth);
+		zPos.textProperty().addListener((obsVal, oldVal, newVal)->{
+			notifySettingsListeners();
+		});
+		
 		addTextValidator(zPos, "z position", validator); 
 		depthLabel = new Label("Depth"); 
 		depthLabel.setAlignment(Pos.CENTER);
@@ -462,14 +478,14 @@ public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
 			 * the sizing of the pane i.e. it does not resize..
 			 */
 			
-//			try {
+			try {
 				if (posVal.isEmpty() || Double.valueOf(posVal)==null) {
-					//c.error("The input for " + description + " is invalid");
+					c.error("The input for " + description + " is invalid");
 				}
-//			}
-//			catch (Exception e) {
-//				c.error("The input for " + description + " is invalid");
-//			}
+			}
+			catch (Exception e) {
+				c.error("The input for " + description + " is invalid");
+			}
 		})
 		.decorates(userTextField).immediate();
 	}
@@ -504,6 +520,8 @@ public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
 		
 		double zCoeff = PamController.getInstance().getGlobalMediumManager().getZCoeff(); 
 		setCoordsText(); 
+		
+		interpPane.setSelection(currentArray.getHydrophoneInterpolation());
 
 		xPos.setText(Double.toString(hydrophone.getX()));
 		yPos.setText(Double.toString(hydrophone.getY()));
@@ -536,8 +554,11 @@ public class HydrophoneSettingsPane extends SettingsPane<Hydrophone> {
 			hydrophone.setdX(Double.valueOf(xPosErr.getText()));
 			hydrophone.setdY(Double.valueOf(yPosErr.getText()));
 			hydrophone.setdZ(Double.valueOf(zPosErr.getText()));
-
 			
+			int hi = interpPane.getSelection();
+			if (hi >= 0) {
+				this.currentArray.setHydrophoneInterpolation(interpPane.getSelectedInterpType());
+			}			
 		}
 		catch (Exception Ex) {
 			System.err.println("There is a problem with one of the parameters in the hydrophone panel");
